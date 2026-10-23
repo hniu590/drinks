@@ -22,6 +22,7 @@ const stopListening = () => { unsubs.forEach((u) => u()); unsubs = []; };
 // ---------- 小工具 ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = (id) => STORES.find((s) => s.id === id);
+const CUP = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.4 12.2a1 1 0 0 1-1 .8H8.4a1 1 0 0 1-1-.8L6 8z"/><path d="M5 8h14"/><path d="M12 8 14.5 2.5"/><circle cx="10" cy="17" r=".6" fill="currentColor"/><circle cx="13" cy="18" r=".6" fill="currentColor"/><circle cx="12" cy="15.5" r=".6" fill="currentColor"/></svg>';
 const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const toDate = (t) => (t && t.toDate ? t.toDate() : null);
 const pageUrl = () => location.href.split('#')[0];
@@ -68,24 +69,42 @@ function showError(e) {
 
 // ---------- 畫面 1：首頁 ----------
 function renderHome() {
+  const now = new Date();
   $app.innerHTML = `
-    <h1>今天訂飲料</h1>
+    <h1>今天喝什麼？</h1>
+    <p class="muted" id="today">${now.getMonth() + 1}/${now.getDate()}（${'日一二三四五六'[now.getDay()]}）</p>
     <p id="err" class="err" hidden></p>
     <div id="list"><p class="muted">載入中…</p></div>
-    <a class="btn primary" href="#/new">我要開團</a>`;
+    <a class="btn primary" href="#/new"><span class="plus">＋</span> 我要開團</a>`;
+  const counts = {};
+  const countSubs = {};
   const since = Timestamp.fromDate(new Date(Date.now() - 24 * 3600 * 1000));
   unsubs.push(onSnapshot(query(collection(db, 'groups'), where('createdAt', '>', since)), (snap) => {
     const groups = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0));
     const list = document.getElementById('list');
     if (!list) return;
-    if (!groups.length) { list.innerHTML = '<p class="muted">現在沒有人開團。</p>'; return; }
+    const openN = groups.filter(isOpen).length;
+    const today = document.getElementById('today');
+    if (today) today.textContent = today.textContent.split(' ·')[0] + ` · ${openN} 團點單中`;
+    if (!groups.length) { list.innerHTML = '<div class="empty">現在沒有人開團，當第一個吧！</div>'; return; }
+    groups.forEach((g) => {
+      if (countSubs[g.id]) return;
+      countSubs[g.id] = true;
+      unsubs.push(onSnapshot(collection(db, 'groups', g.id, 'orders'), (s2) => {
+        counts[g.id] = s2.docs.length;
+        const el = document.getElementById('n-' + g.id); if (el) el.textContent = s2.docs.length;
+      }));
+    });
     list.innerHTML = groups.map((g) => {
       const dl = toDate(g.deadline);
       const open = isOpen(g);
-      return `<a class="card" href="#/g/${g.id}">
-        <div class="title">${esc(g.storeName)} ${open ? '' : '<span class="tag">已截止</span>'}</div>
-        <div class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''}</div></a>`;
+      const color = store(g.storeId)?.color || 'amber';
+      return `<a class="card store-${color}${open ? '' : ' closed'}" href="#/g/${g.id}">
+        <span class="cup">${CUP}</span>
+        <span class="info"><span class="title">${esc(g.storeName)}</span>
+          <span class="muted">${esc(g.leader)}開團 · 已點 <span id="n-${g.id}">${counts[g.id] ?? '…'}</span> 杯</span></span>
+        <span class="when">${open ? `<b>${dl ? hhmm(dl) : ''}</b><small>截止</small>` : '<small>已截止</small>'}</span></a>`;
     }).join('');
   }, showError));
 }
@@ -153,7 +172,7 @@ function renderNew() {
 function renderOrder(gid) {
   $app.innerHTML = '<p class="muted">載入中…</p>';
   const me = mem.get('me');
-  const f = { name: TEACHERS.includes(me) ? me : '', item: '', size: '', sugar: '', ice: '', toppings: [], note: '', pay: '轉帳' };
+  const f = { cat: '', name: TEACHERS.includes(me) ? me : '', item: '', size: '', sugar: '', ice: '', toppings: [], note: '', pay: '轉帳' };
   let g = null; let orders = []; let done = null; let built = false;
 
   const price = (st) => {
@@ -167,17 +186,22 @@ function renderOrder(gid) {
     const dl = toDate(g.deadline);
     const last = mem.get('last.' + g.storeId);
     const open = isOpen(g);
+    const cats = [...new Set(st.items.map((i) => i.c || '飲料'))];
+    if (!cats.includes(f.cat)) f.cat = (st.items.find((i) => i.n === f.item)?.c) || cats[0];
     $app.innerHTML = `
       <a class="back" href="#/">‹ 回首頁</a>
-      <h1>${esc(g.storeName)}</h1>
-      <p class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''} · <a href="#/g/${gid}/sum">看彙整</a></p>
+      <div class="store-head store-${st.color || 'amber'}"><span class="cup">${CUP}</span>
+        <span><h1>${esc(g.storeName)}</h1>
+        <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''} · <a href="#/g/${gid}/sum">看彙整</a></span></span></div>
       <p id="err" class="err" hidden></p>
       <div id="done"></div>
       ${open ? `<div id="form">
         <h2>你是誰</h2>${chips('name', TEACHERS, f.name)}
-        ${last ? `<button id="same" class="btn">跟上次一樣：${esc(desc(last))}</button>` : ''}
-        <h2>飲料</h2>${chips('item', st.items.map((i) => ({ label: `${i.n} ${Object.values(i.p).join('/')}`, value: i.n })), f.item)}
-        <h2>大小</h2>${chips('size', st.sizes, f.size)}
+        ${last ? `<button id="same" class="btn soft">↻ 跟上次一樣：${esc(desc(last))}</button>` : ''}
+        <h2>飲料</h2>
+        <div class="tabs">${cats.map((c) => `<button type="button" class="tab${c === f.cat ? ' on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+        <div id="menu"></div>
+        <h2>大小</h2>${chips('size', st.sizes.map((z) => { const it = st.items.find((i) => i.n === f.item); return { label: it ? `${z}杯 ${it.p[z]}` : `${z}杯`, value: z }; }), f.size)}
         <h2>甜度</h2>${chips('sugar', st.sugar, f.sugar)}
         <h2>冰塊</h2>${chips('ice', st.ice, f.ice)}
         <h2>加料（可以不選）</h2>${chips('toppings', st.toppings.map((t) => ({ label: `+${t.n} ${t.p}`, value: t.n })), f.toppings, true)}
@@ -196,6 +220,14 @@ function renderOrder(gid) {
           c.classList.toggle('on', k === 'toppings' ? f.toppings.includes(c.dataset.value) : f[k] === c.dataset.value);
         });
       });
+      const menu = document.getElementById('menu');
+      if (menu) {
+        menu.innerHTML = st.items.filter((i) => (i.c || '飲料') === f.cat).map((i) => `<button type="button" class="item${i.n === f.item ? ' on' : ''}" data-item="${esc(i.n)}">
+          <span>${esc(i.n)}</span><span class="muted">${st.sizes.map((z) => z + ' ' + i.p[z]).join(' / ')}</span></button>`).join('');
+      }
+      $app.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.cat === f.cat));
+      const it = st.items.find((i) => i.n === f.item);
+      $app.querySelectorAll('.chips[data-group=size] .chip').forEach((c) => { c.textContent = it ? `${c.dataset.value}杯 ${it.p[c.dataset.value]}` : `${c.dataset.value}杯`; });
       const p = document.getElementById('price'); if (p) p.textContent = price(st);
       const note = document.getElementById('note'); if (note && note.value !== f.note) note.value = f.note;
     };
@@ -209,8 +241,18 @@ function renderOrder(gid) {
       if (k === 'name') { f.pay = '轉帳'; renderOrders(); }
       refresh();
     }));
+    $app.querySelector('.tabs')?.addEventListener('click', (ev) => {
+      const t = ev.target.closest('.tab'); if (!t) return; f.cat = t.dataset.cat; refresh();
+    });
+    document.getElementById('menu')?.addEventListener('click', (ev) => {
+      const b = ev.target.closest('.item'); if (!b) return;
+      f.item = b.dataset.item;
+      const msg = document.getElementById('msg'); if (msg) msg.hidden = true;
+      refresh();
+    });
     document.getElementById('note')?.addEventListener('input', (e) => { f.note = e.target.value; });
     document.getElementById('same')?.addEventListener('click', () => {
+      f.cat = st.items.find((i) => i.n === last.item)?.c || f.cat;
       Object.assign(f, { item: last.item, size: last.size, sugar: last.sugar, ice: last.ice, toppings: [...(last.toppings || [])], note: last.note || '', pay: last.pay || '轉帳' });
       refresh();
       document.getElementById('send').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -311,14 +353,14 @@ function renderSummary(gid, isNew) {
 
     $app.innerHTML = `
       <a class="back" href="#/g/${gid}">‹ 回點飲料</a>
-      <h1>${esc(g.storeName)} 彙整</h1>
-      <p class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''} · ${isOpen(g) ? '點單中' : '已截止'}</p>
+      <div class="store-head store-${store(g.storeId)?.color || 'amber'}"><span class="cup">${CUP}</span><span><h1>${esc(g.storeName)} 彙整</h1>
+      <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''} · ${isOpen(g) ? '點單中' : '已截止'}</span></span></div>
       <p id="err" class="err" hidden></p>
       ${isNew ? '<p class="notice">開團成功！先把下面這段話貼到 LINE 群。</p>' : ''}
-      <div class="box"><pre>${esc(lineText)}</pre><button id="copyLine" class="btn">複製這段話貼到 LINE</button></div>
+      <div class="box"><pre>${esc(lineText)}</pre><button id="copyLine" class="btn soft">複製這段話貼到 LINE</button></div>
       <h2>跟店家這樣說（共 ${orders.length} 杯，${total} 元）</h2>
       ${orders.length ? `<div class="box">${Object.entries(merged).map(([k, n]) => `<div class="row"><span>${esc(k)}</span><b>×${n}</b></div>`).join('')}
-        <button id="copyShop" class="btn">複製清單</button></div>` : '<p class="muted">還沒有人點。</p>'}
+        <button id="copyShop" class="btn soft">複製清單</button></div>` : '<p class="muted">還沒有人點。</p>'}
       <h2>誰要付多少（已收 ${got} / ${total} 元）</h2>
       <p class="muted small">收到錢就打勾。</p>
       <div class="box">${plist.map((p) => `<label class="row check">

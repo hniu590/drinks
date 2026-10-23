@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function str(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+
+    match /people/{name} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasOnly(['account'])
+        && request.resource.data.account is string
+        && request.resource.data.account.size() <= 40;
+    }
+
+    match /groups/{gid} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['storeId', 'storeName', 'leader', 'account', 'deadline', 'createdAt', 'closed'])
+        && str(request.resource.data.storeId, 40)
+        && str(request.resource.data.storeName, 40)
+        && str(request.resource.data.leader, 20)
+        && str(request.resource.data.account, 40)
+        && request.resource.data.deadline is timestamp
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.closed == false;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['closed'])
+        && request.resource.data.closed is bool;
+
+      match /orders/{oid} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasOnly(['name', 'item', 'size', 'sugar', 'ice', 'toppings', 'note', 'price', 'pay', 'paid', 'createdAt'])
+          && str(request.resource.data.name, 20)
+          && str(request.resource.data.item, 40)
+          && str(request.resource.data.size, 10)
+          && str(request.resource.data.sugar, 10)
+          && str(request.resource.data.ice, 10)
+          && request.resource.data.toppings is list && request.resource.data.toppings.size() <= 6
+          && request.resource.data.note is string && request.resource.data.note.size() <= 60
+          && request.resource.data.price is int && request.resource.data.price >= 0 && request.resource.data.price <= 1000
+          && request.resource.data.pay in ['轉帳', '現金']
+          && request.resource.data.paid == false
+          && request.resource.data.createdAt == request.time
+          && get(/databases/$(database)/documents/groups/$(gid)).data.closed == false;
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid'])
+          && request.resource.data.paid is bool;
+        allow delete: if true;
+      }
+    }
+  }
+}

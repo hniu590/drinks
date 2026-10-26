@@ -184,7 +184,6 @@ function renderOrder(gid) {
   const build = () => {
     const st = store(g.storeId);
     const dl = toDate(g.deadline);
-    const last = mem.get('last.' + g.storeId);
     const open = isOpen(g);
     const cats = [...new Set(st.items.map((i) => i.c || '飲料'))];
     if (!cats.includes(f.cat)) f.cat = (st.items.find((i) => i.n === f.item)?.c) || cats[0];
@@ -197,7 +196,6 @@ function renderOrder(gid) {
       <div id="done"></div>
       ${open ? `<div id="form">
         <h2>你是誰</h2>${chips('name', TEACHERS, f.name)}
-        ${last ? `<button id="same" class="btn soft">↻ 跟上次一樣：${esc(desc(last))}</button>` : ''}
         <h2>飲料</h2>
         <div class="tabs">${cats.map((c) => `<button type="button" class="tab${c === f.cat ? ' on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
         <div id="menu"></div>
@@ -251,12 +249,6 @@ function renderOrder(gid) {
       refresh();
     });
     document.getElementById('note')?.addEventListener('input', (e) => { f.note = e.target.value; });
-    document.getElementById('same')?.addEventListener('click', () => {
-      f.cat = st.items.find((i) => i.n === last.item)?.c || f.cat;
-      Object.assign(f, { item: last.item, size: last.size, sugar: last.sugar, ice: last.ice, toppings: [...(last.toppings || [])], note: last.note || '', pay: last.pay || '轉帳' });
-      refresh();
-      document.getElementById('send').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
     document.getElementById('send')?.addEventListener('click', async (ev) => {
       const msg = document.getElementById('msg');
       const problem = !f.name ? '先選你是誰' : !f.item ? '先選飲料' : !f.size ? '先選大小' : !f.sugar ? '先選甜度' : !f.ice ? '先選冰塊' : '';
@@ -267,7 +259,6 @@ function renderOrder(gid) {
       try {
         await addDoc(collection(db, 'groups', gid, 'orders'), { ...o, paid: false, createdAt: serverTimestamp() });
         mem.set('me', f.name);
-        mem.set('last.' + g.storeId, o);
         done = o;
         Object.assign(f, { item: '', size: '', sugar: '', ice: '', toppings: [], note: '' });
         refresh();

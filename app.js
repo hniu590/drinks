@@ -22,6 +22,7 @@ const stopListening = () => { unsubs.forEach((u) => u()); unsubs = []; };
 // ---------- 小工具 ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = (id) => STORES.find((s) => s.id === id);
+const sizeName = (z) => (z === '瓶' ? '瓶裝' : z + '杯');
 const CUP = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.4 12.2a1 1 0 0 1-1 .8H8.4a1 1 0 0 1-1-.8L6 8z"/><path d="M5 8h14"/><path d="M12 8 14.5 2.5"/><circle cx="10" cy="17" r=".6" fill="currentColor"/><circle cx="13" cy="18" r=".6" fill="currentColor"/><circle cx="12" cy="15.5" r=".6" fill="currentColor"/></svg>';
 const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const toDate = (t) => (t && t.toDate ? t.toDate() : null);
@@ -183,6 +184,7 @@ function renderOrder(gid) {
 
   const build = () => {
     const st = store(g.storeId);
+    if (!st) { $app.innerHTML = '<a class="back" href="#/">‹ 回首頁</a><p class="notice">這一團的店家已經不在菜單裡了。</p>'; return; }
     const dl = toDate(g.deadline);
     const open = isOpen(g);
     const cats = [...new Set(st.items.map((i) => i.c || '飲料'))];
@@ -199,10 +201,10 @@ function renderOrder(gid) {
         <h2>飲料</h2>
         <div class="tabs">${cats.map((c) => `<button type="button" class="tab${c === f.cat ? ' on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
         <div id="menu"></div>
-        <h2>大小</h2>${chips('size', st.sizes.map((z) => { const it = st.items.find((i) => i.n === f.item); return { label: it ? `${z}杯 ${it.p[z]}` : `${z}杯`, value: z }; }), f.size)}
+        <h2>大小</h2>${chips('size', st.sizes.map((z) => ({ label: sizeName(z), value: z })), f.size)}
         <h2>甜度</h2>${chips('sugar', st.sugar, f.sugar)}
         <h2>冰塊</h2>${chips('ice', st.ice, f.ice)}
-        <h2>加料（可以不選）</h2>${chips('toppings', st.toppings.map((t) => ({ label: `+${t.n} ${t.p}`, value: t.n })), f.toppings, true)}
+        ${st.toppings.length ? `<h2>加料（可以不選）</h2>${chips('toppings', st.toppings.map((t) => ({ label: `+${t.n} ${t.p}`, value: t.n })), f.toppings, true)}` : ''}
         <h2>備註（可以不填）</h2><input id="note" maxlength="60" placeholder="例：分兩杯裝">
         <h2>怎麼付錢</h2>${chips('pay', ['轉帳', '現金'], f.pay)}
         <p id="msg" class="err" hidden></p>
@@ -221,11 +223,14 @@ function renderOrder(gid) {
       const menu = document.getElementById('menu');
       if (menu) {
         menu.innerHTML = st.items.filter((i) => (i.c || '飲料') === f.cat).map((i) => `<button type="button" class="item${i.n === f.item ? ' on' : ''}" data-item="${esc(i.n)}">
-          <span>${esc(i.n)}</span><span class="muted">${st.sizes.map((z) => z + ' ' + i.p[z]).join(' / ')}</span></button>`).join('');
+          <span>${esc(i.n)}</span><span class="muted">${st.sizes.filter((z) => i.p[z] != null).map((z) => sizeName(z) + ' ' + i.p[z]).join(' / ')}</span></button>`).join('');
       }
       $app.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.cat === f.cat));
       const it = st.items.find((i) => i.n === f.item);
-      $app.querySelectorAll('.chips[data-group=size] .chip').forEach((c) => { c.textContent = it ? `${c.dataset.value}杯 ${it.p[c.dataset.value]}` : `${c.dataset.value}杯`; });
+      $app.querySelectorAll('.chips[data-group=size] .chip').forEach((c) => {
+        const z = c.dataset.value; const has = !it || it.p[z] != null;
+        c.hidden = !has; c.textContent = it && has ? `${sizeName(z)} ${it.p[z]}` : sizeName(z);
+      });
       const p = document.getElementById('price'); if (p) p.textContent = price(st);
       const note = document.getElementById('note'); if (note && note.value !== f.note) note.value = f.note;
     };
@@ -245,6 +250,9 @@ function renderOrder(gid) {
     document.getElementById('menu')?.addEventListener('click', (ev) => {
       const b = ev.target.closest('.item'); if (!b) return;
       f.item = b.dataset.item;
+      const picked = st.items.find((i) => i.n === f.item);
+      const sz = st.sizes.filter((z) => picked.p[z] != null);
+      if (!sz.includes(f.size)) f.size = sz.length === 1 ? sz[0] : '';
       const msg = document.getElementById('msg'); if (msg) msg.hidden = true;
       refresh();
     });
@@ -312,7 +320,7 @@ function renderOrder(gid) {
 }
 
 function desc(o) {
-  const parts = [o.item, o.size + '杯', o.sugar, o.ice];
+  const parts = [o.item, sizeName(o.size), o.sugar, o.ice];
   if (o.toppings && o.toppings.length) parts.push('+' + o.toppings.join('+'));
   if (o.note) parts.push('（' + o.note + '）');
   return parts.join(' ');

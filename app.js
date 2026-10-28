@@ -26,6 +26,12 @@ const sizeName = (z) => (z === '瓶' ? '瓶裝' : z + '杯');
 const CUP = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8h12l-1.4 12.2a1 1 0 0 1-1 .8H8.4a1 1 0 0 1-1-.8L6 8z"/><path d="M5 8h14"/><path d="M12 8 14.5 2.5"/><circle cx="10" cy="17" r=".6" fill="currentColor"/><circle cx="13" cy="18" r=".6" fill="currentColor"/><circle cx="12" cy="15.5" r=".6" fill="currentColor"/></svg>';
 const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const toDate = (t) => (t && t.toDate ? t.toDate() : null);
+const dayDiff = (d) => { const a = new Date(d); a.setHours(0, 0, 0, 0); const b = new Date(); b.setHours(0, 0, 0, 0); return Math.round((a - b) / 86400000); };
+const mdw = (d) => `${d.getMonth() + 1}/${d.getDate()}（${'日一二三四五六'[d.getDay()]}）`;
+// 截止時間怎麼寫：今天只寫時間；明天寫「明天 15:00」；其他寫日期
+const whenText = (d) => { const n = dayDiff(d); return (n === 0 ? '' : n === 1 ? '明天 ' : mdw(d) + ' ') + hhmm(d); };
+// 給 LINE 的：不是今天就把日期寫清楚
+const whenLine = (d) => (dayDiff(d) === 0 ? hhmm(d) : (dayDiff(d) === 1 ? '明天 ' : '') + mdw(d) + ' ' + hhmm(d));
 const pageUrl = () => location.href.split('#')[0];
 
 const mem = {
@@ -79,10 +85,11 @@ function renderHome() {
     <a class="btn primary" href="#/new"><span class="plus">＋</span> 我要開團</a>`;
   const counts = {};
   const countSubs = {};
-  const since = Timestamp.fromDate(new Date(Date.now() - 24 * 3600 * 1000));
-  unsubs.push(onSnapshot(query(collection(db, 'groups'), where('createdAt', '>', since)), (snap) => {
+  const since = Timestamp.fromDate(new Date(Date.now() - 12 * 3600 * 1000));
+  unsubs.push(onSnapshot(query(collection(db, 'groups'), where('deadline', '>', since)), (snap) => {
+    // 點單中的在上面、先截止的排前面；已截止的放後面
     const groups = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0));
+      .sort((a, b) => (isOpen(b) - isOpen(a)) || ((toDate(a.deadline) || 0) - (toDate(b.deadline) || 0)));
     const list = document.getElementById('list');
     if (!list) return;
     const openN = groups.filter(isOpen).length;
@@ -105,7 +112,7 @@ function renderHome() {
         <span class="cup">${CUP}</span>
         <span class="info"><span class="title">${esc(g.storeName)}</span>
           <span class="muted">${esc(g.leader)}開團 · 已點 <span id="n-${g.id}">${counts[g.id] ?? '…'}</span> 杯</span></span>
-        <span class="when">${open ? `<b>${dl ? hhmm(dl) : ''}</b><small>截止</small>` : '<small>已截止</small>'}</span></a>`;
+        <span class="when">${open ? `<b>${dl ? whenText(dl) : ''}</b><small>截止</small>` : '<small>已截止</small>'}</span></a>`;
     }).join('');
   }, showError));
 }
@@ -113,16 +120,18 @@ function renderHome() {
 // ---------- 畫面 2：開團 ----------
 function renderNew() {
   const me = mem.get('me');
-  const s = { leader: TEACHERS.includes(me) ? me : '', storeId: STORES[0].id };
+  const s = { leader: TEACHERS.includes(me) ? me : '', storeId: STORES[0].id, day: '0' };
   let def = new Date(Date.now() + 60 * 60 * 1000);
-  if (def.getDate() !== new Date().getDate()) { def = new Date(); def.setHours(23, 59, 0, 0); }
+  // 太晚了（今天剩不到一小時）就預設明天下午 3 點
+  if (def.getDate() !== new Date().getDate()) { s.day = '1'; def = new Date(); def.setHours(15, 0, 0, 0); }
   $app.innerHTML = `
     <a class="back" href="#/">‹ 回首頁</a>
     <h1>開團</h1>
     <p id="err" class="err" hidden></p>
     <h2>你是誰</h2>${chips('leader', TEACHERS, s.leader)}
     <h2>選店家</h2>${chips('store', STORES.map((x) => ({ label: x.name, value: x.id })), s.storeId)}
-    <h2>今天幾點截止</h2><input id="deadline" type="time" value="${hhmm(def)}">
+    <h2>哪天截止</h2>${chips('day', [{ label: '今天 ' + mdw(new Date()), value: '0' }, { label: '明天 ' + mdw(new Date(Date.now() + 86400000)), value: '1' }], s.day)}
+    <h2>幾點截止</h2><input id="deadline" type="time" value="${hhmm(def)}">
     <h2>你的郵局帳號</h2>
     <input id="account" inputmode="numeric" placeholder="0001234-0567890" maxlength="40">
     <p class="muted small">存過一次，下次開團會自動帶出。大家點完會看到這個帳號。</p>
@@ -143,6 +152,7 @@ function renderNew() {
     const b = ev.target.closest('.chip'); if (!b) return;
     box.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b));
     if (box.dataset.group === 'leader') { s.leader = b.dataset.value; loadAccount(); }
+    else if (box.dataset.group === 'day') s.day = b.dataset.value;
     else s.storeId = b.dataset.value;
   }));
 
@@ -154,7 +164,7 @@ function renderNew() {
     if (problem) { msg.textContent = problem; msg.hidden = false; return; }
     msg.hidden = true;
     const [h, m] = t.split(':').map(Number);
-    const dl = new Date(); dl.setHours(h, m, 0, 0);
+    const dl = new Date(); dl.setDate(dl.getDate() + Number(s.day)); dl.setHours(h, m, 0, 0);
     if (dl <= new Date()) { msg.textContent = '這個時間已經過了，請選晚一點'; msg.hidden = false; return; }
     ev.target.disabled = true;
     try {
@@ -193,7 +203,7 @@ function renderOrder(gid) {
       <a class="back" href="#/">‹ 回首頁</a>
       <div class="store-head store-${st.color || 'amber'}"><span class="cup">${CUP}</span>
         <span><h1>${esc(g.storeName)}</h1>
-        <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''} · <a href="#/g/${gid}/sum">看彙整</a></span></span></div>
+        <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + whenText(dl) + ' 截止' : ''} · <a href="#/g/${gid}/sum">看彙整</a></span></span></div>
       <p id="err" class="err" hidden></p>
       <div id="done"></div>
       ${open ? `<div id="form">
@@ -335,7 +345,7 @@ function renderSummary(gid, isNew) {
     if (!g) return;
     const dl = toDate(g.deadline);
     const link = `${pageUrl()}#/g/${gid}`;
-    const lineText = `${g.storeName} 開團囉！${dl ? hhmm(dl) + ' 截止' : ''}\n要喝的點這裡 👉 ${link}`;
+    const lineText = `${g.storeName} 開團囉！${dl ? whenLine(dl) + ' 截止' : ''}\n要喝的點這裡 👉 ${link}`;
 
     const merged = {};
     orders.forEach((o) => { const k = desc(o); merged[k] = (merged[k] || 0) + 1; });
@@ -353,7 +363,7 @@ function renderSummary(gid, isNew) {
     $app.innerHTML = `
       <a class="back" href="#/g/${gid}">‹ 回點飲料</a>
       <div class="store-head store-${store(g.storeId)?.color || 'amber'}"><span class="cup">${CUP}</span><span><h1>${esc(g.storeName)} 彙整</h1>
-      <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + hhmm(dl) + ' 截止' : ''} · ${isOpen(g) ? '點單中' : '已截止'}</span></span></div>
+      <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + whenText(dl) + ' 截止' : ''} · ${isOpen(g) ? '點單中' : '已截止'}</span></span></div>
       <p id="err" class="err" hidden></p>
       ${isNew ? '<p class="notice">開團成功！先把下面這段話貼到 LINE 群。</p>' : ''}
       <div class="box"><pre>${esc(lineText)}</pre><button id="copyLine" class="btn soft">複製這段話貼到 LINE</button></div>

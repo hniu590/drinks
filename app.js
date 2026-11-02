@@ -74,47 +74,181 @@ function showError(e) {
   if (box) { box.textContent = '連不上資料庫，請稍後再試。（' + (e.code || e.message || e) + '）'; box.hidden = false; }
 }
 
-// ---------- 畫面 1：首頁 ----------
+// ---------- 首頁三區：點飲料／我要付錢／我開的團 ----------
+// 首頁的團：截止後 12 小時內；我開的團：截止後 3 天內；我要付錢：截止後 7 天內、團主還沒打勾（老師 11/2 決定）
+const HOUR = 3600 * 1000;
+const KEEP = { home: 12 * HOUR, mine: 3 * 24 * HOUR, pay: 7 * 24 * HOUR };
+const within = (g, ms) => { const dl = toDate(g.deadline); return !dl || dl.getTime() > Date.now() - ms; };
+const PAY_NOTE = '請備註自己的名字！謝謝您';
+
+function tabBar(on) {
+  const t = [['/', '點飲料'], ['/pay', '我要付錢'], ['/mine', '我開的團']];
+  return `<nav class="area">${t.map(([h, n]) => `<a href="#${h}"${h === on ? ' class="on" aria-current="page"' : ''}>${n}</a>`).join('')}</nav>`;
+}
+
+// 「我是 ○○（換人）」；還不知道是誰就列名字讓他選
+function whoBox(me, onPick) {
+  const box = document.getElementById('who');
+  if (TEACHERS.includes(me)) {
+    box.innerHTML = `<p class="who">我是 <b>${esc(me)}</b> <button class="link" id="chg">換人</button></p>`;
+    document.getElementById('chg').addEventListener('click', () => { box.innerHTML = `<h2>你是誰</h2>${chips('who', TEACHERS, me)}`; bind(); });
+  } else {
+    box.innerHTML = `<h2>你是誰</h2>${chips('who', TEACHERS, '')}`; bind();
+  }
+  function bind() {
+    box.querySelector('.chips').addEventListener('click', (ev) => {
+      const b = ev.target.closest('.chip'); if (!b) return;
+      mem.set('me', b.dataset.value); onPick(b.dataset.value);
+    });
+  }
+}
+
+// 每個區都要：最近 7 天的團＋每團的點單（即時更新）
+function watchGroups(onChange) {
+  const groups = {}; const orders = {};
+  const since = Timestamp.fromDate(new Date(Date.now() - KEEP.pay));
+  unsubs.push(onSnapshot(query(collection(db, 'groups'), where('deadline', '>', since)), (snap) => {
+    snap.docs.forEach((d) => {
+      if (!groups[d.id]) {
+        unsubs.push(onSnapshot(collection(db, 'groups', d.id, 'orders'), (s2) => {
+          orders[d.id] = s2.docs.map((x) => ({ id: x.id, ...x.data() })); onChange(groups, orders);
+        }, showError));
+      }
+      groups[d.id] = { id: d.id, ...d.data() };
+    });
+    Object.keys(groups).forEach((id) => { if (!snap.docs.some((d) => d.id === id)) delete groups[id]; });
+    onChange(groups, orders);
+  }, showError));
+}
+
+// 點單中的在上面、先截止的排前面；已截止的放後面、最近截止的排前面
+const byDeadline = (a, b) => (isOpen(b) - isOpen(a)) || ((isOpen(a) ? 1 : -1) * ((toDate(a.deadline) || 0) - (toDate(b.deadline) || 0)));
+
+// ① 點飲料
 function renderHome() {
   const now = new Date();
-  $app.innerHTML = `
+  $app.innerHTML = `${tabBar('/')}
     <h1>今天喝什麼？</h1>
-    <p class="muted" id="today">${now.getMonth() + 1}/${now.getDate()}（${'日一二三四五六'[now.getDay()]}）</p>
+    <p class="muted" id="today">${mdw(now)}</p>
     <p id="err" class="err" hidden></p>
     <div id="list"><p class="muted">載入中…</p></div>
     <a class="btn primary" href="#/new"><span class="plus">＋</span> 我要開團</a>`;
-  const counts = {};
-  const countSubs = {};
-  const since = Timestamp.fromDate(new Date(Date.now() - 12 * 3600 * 1000));
-  unsubs.push(onSnapshot(query(collection(db, 'groups'), where('deadline', '>', since)), (snap) => {
+  watchGroups((groups, orders) => {
     // 點單中的在上面、先截止的排前面；已截止的放後面
-    const groups = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (isOpen(b) - isOpen(a)) || ((toDate(a.deadline) || 0) - (toDate(b.deadline) || 0)));
-    const list = document.getElementById('list');
-    if (!list) return;
-    const openN = groups.filter(isOpen).length;
-    const today = document.getElementById('today');
-    if (today) today.textContent = today.textContent.split(' ·')[0] + ` · ${openN} 團點單中`;
-    if (!groups.length) { list.innerHTML = '<div class="empty">現在沒有人開團，當第一個吧！</div>'; return; }
-    groups.forEach((g) => {
-      if (countSubs[g.id]) return;
-      countSubs[g.id] = true;
-      unsubs.push(onSnapshot(collection(db, 'groups', g.id, 'orders'), (s2) => {
-        counts[g.id] = s2.docs.length;
-        const el = document.getElementById('n-' + g.id); if (el) el.textContent = s2.docs.length;
-      }));
-    });
-    list.innerHTML = groups.map((g) => {
+    const list = document.getElementById('list'); if (!list) return;
+    const gs = Object.values(groups).filter((g) => within(g, KEEP.home)).sort(byDeadline);
+    document.getElementById('today').textContent = `${mdw(now)} · ${gs.filter(isOpen).length} 團點單中`;
+    if (!gs.length) { list.innerHTML = '<div class="empty">現在沒有人開團，當第一個吧！</div>'; return; }
+    list.innerHTML = gs.map((g) => {
       const dl = toDate(g.deadline);
       const open = isOpen(g);
       const color = store(g.storeId)?.color || 'amber';
       return `<a class="card store-${color}${open ? '' : ' closed'}" href="#/g/${g.id}">
         <span class="cup">${CUP}</span>
         <span class="info"><span class="title">${esc(g.storeName)}</span>
-          <span class="muted">${esc(g.leader)}開團 · 已點 <span id="n-${g.id}">${counts[g.id] ?? '…'}</span> 杯</span></span>
+          <span class="muted">${esc(g.leader)}開團 · 已點 ${orders[g.id] ? orders[g.id].length : '…'} 杯</span></span>
         <span class="when">${open ? `<b>${dl ? whenText(dl) : ''}</b><small>截止</small>` : '<small>已截止</small>'}</span></a>`;
     }).join('');
-  }, showError));
+  });
+}
+
+// 告訴團主「我付了」：把這個人在這一團、同一種付法、還沒打勾的杯子都標上
+async function tell(gid, ids, kind) {
+  const b = writeBatch(db);
+  ids.forEach((id) => b.update(doc(db, 'groups', gid, 'orders', id), { told: kind }));
+  try { await b.commit(); } catch (e) { showError(e); }
+}
+
+// ② 我要付錢（同事）
+function renderPay() {
+  $app.innerHTML = `${tabBar('/pay')}
+    <h1>我要付錢</h1>
+    <p id="err" class="err" hidden></p>
+    <div id="who"></div>
+    <div id="list"><p class="muted">載入中…</p></div>`;
+  let me = mem.get('me'); let last = null;
+  const draw = () => {
+    const list = document.getElementById('list'); if (!list || !last) return;
+    if (!TEACHERS.includes(me)) { list.innerHTML = ''; return; }
+    const [groups, orders] = last;
+    const bills = [];
+    Object.values(groups).sort(byDeadline).forEach((g) => {
+      ['轉帳', '現金'].forEach((pay) => {
+        const mine = (orders[g.id] || []).filter((o) => o.name === me && !o.paid && (o.pay || '轉帳') === pay);
+        if (mine.length) bills.push({ g, pay, mine, total: mine.reduce((s, o) => s + o.price, 0), told: mine.every((o) => o.told) });
+      });
+    });
+    if (!bills.length) { list.innerHTML = '<div class="empty">沒有要付的錢。</div>'; return; }
+    list.innerHTML = bills.map((x, i) => {
+      const color = store(x.g.storeId)?.color || 'amber';
+      const cash = x.pay === '現金';
+      return `<div class="bill store-${color}">
+        <div class="bill-head"><span class="cup">${CUP}</span><span><b>${esc(x.g.storeName)}</b>
+          <span class="muted"> · ${mdw(toDate(x.g.deadline) || new Date())}</span><br><span class="muted">${esc(x.mine.map((o) => o.item).join('、'))}</span></span></div>
+        <div class="bill-amt">${x.total} 元 <small>給 ${esc(x.g.leader)}${cash ? '（現金）' : ''}</small></div>
+        ${x.told ? `<p class="ok-line">已告訴${esc(x.g.leader)}${cash ? '給現金了' : '匯好了'}，等團主確認 <button class="link undo" data-i="${i}">按錯了</button></p>`
+        : `${cash ? '' : `<div class="acct">郵局 <b>${esc(x.g.account)}</b> <button class="link cp" data-i="${i}">複製帳號</button></div>
+          <p class="note">${PAY_NOTE}</p>`}
+          <button class="btn primary tell" data-i="${i}">${cash ? '我給現金了' : '我匯好了'}</button>`}
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.cp').forEach((b) => b.addEventListener('click', () => copy(bills[b.dataset.i].g.account.replace(/\D/g, ''), b)));
+    list.querySelectorAll('.tell').forEach((b) => b.addEventListener('click', () => { const x = bills[b.dataset.i]; b.disabled = true; tell(x.g.id, x.mine.map((o) => o.id), x.pay === '現金' ? '現金' : '匯款'); }));
+    list.querySelectorAll('.undo').forEach((b) => b.addEventListener('click', () => { const x = bills[b.dataset.i]; tell(x.g.id, x.mine.map((o) => o.id), ''); }));
+  };
+  const pick = (name) => { me = name; whoBox(me, pick); draw(); };
+  whoBox(me, pick);
+  watchGroups((groups, orders) => { last = [groups, orders]; draw(); });
+}
+
+// 每個人付錢的狀態：收到 > 說已付 > 還沒付
+function payState(p) {
+  if (p.paid) return { cls: 'st-ok', text: '收到' };
+  if (p.told) return { cls: 'st-told', text: p.told === '現金' ? '說已給現金' : p.told === '匯款' ? '說已匯款' : '說已匯款＋給現金' };
+  return { cls: 'st-no', text: '還沒付' };
+}
+function people(orders) {
+  const ps = {};
+  orders.forEach((o) => {
+    const p = ps[o.name] || (ps[o.name] = { name: o.name, total: 0, pay: new Set(), ids: [], paid: true, toldAll: true, kinds: new Set() });
+    p.total += o.price; p.pay.add(o.pay); p.ids.push(o.id);
+    if (!o.paid) { p.paid = false; if (o.told) p.kinds.add(o.told); else p.toldAll = false; }
+  });
+  // told：全部沒打勾的杯子都說付了才算；兩種都有就是「匯款＋現金」
+  return Object.values(ps).map((p) => ({ ...p, told: !p.paid && p.toldAll ? (p.kinds.size > 1 ? '都有' : [...p.kinds][0]) : '' }));
+}
+
+// ③ 我開的團（團主）
+function renderMine() {
+  $app.innerHTML = `${tabBar('/mine')}
+    <h1>我開的團</h1>
+    <p id="err" class="err" hidden></p>
+    <div id="who"></div>
+    <div id="list"><p class="muted">載入中…</p></div>`;
+  let me = mem.get('me'); let last = null;
+  const draw = () => {
+    const list = document.getElementById('list'); if (!list || !last) return;
+    if (!TEACHERS.includes(me)) { list.innerHTML = ''; return; }
+    const [groups, orders] = last;
+    const gs = Object.values(groups).filter((g) => g.leader === me && within(g, KEEP.mine)).sort(byDeadline);
+    if (!gs.length) { list.innerHTML = '<div class="empty">最近 3 天沒有開團。</div><a class="btn primary" href="#/new"><span class="plus">＋</span> 我要開團</a>'; return; }
+    list.innerHTML = gs.map((g) => {
+      const os = orders[g.id] || [];
+      const ps = people(os);
+      const total = os.reduce((s, o) => s + o.price, 0);
+      const got = ps.filter((p) => p.paid).reduce((s, p) => s + p.total, 0);
+      const told = ps.filter((p) => p.told).length;
+      const dl = toDate(g.deadline);
+      return `<div class="bill store-${store(g.storeId)?.color || 'amber'}">
+        <div class="bill-head"><span class="cup">${CUP}</span><span><b>${esc(g.storeName)}</b>
+          <span class="muted"> · ${isOpen(g) ? (dl ? whenText(dl) + ' 截止' : '點單中') : (dl ? mdw(dl) + ' ' : '') + '已截止'}</span><br>
+          <span class="muted">${os.length} 杯 · 已收 ${got} / ${total} 元${told ? ` · <span class="st-told">${told} 人說已付</span>` : ''}</span></span></div>
+        <a class="btn primary" href="#/g/${g.id}/sum">看彙整、對帳</a></div>`;
+    }).join('');
+  };
+  const pick = (name) => { me = name; whoBox(me, pick); draw(); };
+  whoBox(me, pick);
+  watchGroups((groups, orders) => { last = [groups, orders]; draw(); });
 }
 
 // ---------- 畫面 2：開團 ----------
@@ -203,8 +337,9 @@ function renderOrder(gid) {
       <a class="back" href="#/">‹ 回首頁</a>
       <div class="store-head store-${st.color || 'amber'}"><span class="cup">${CUP}</span>
         <span><h1>${esc(g.storeName)}</h1>
-        <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + whenText(dl) + ' 截止' : ''} · <a href="#/g/${gid}/sum">看彙整</a></span></span></div>
+        <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + whenText(dl) + ' 截止' : ''}</span></span></div>
       <p id="err" class="err" hidden></p>
+      ${!open || mem.get('me') === g.leader ? `<a class="btn soft sumbtn" href="#/g/${gid}/sum">看彙整、對帳（團主）</a>` : ''}
       <div id="done"></div>
       ${open ? `<div id="form">
         <h2>你是誰</h2>${chips('name', TEACHERS, f.name)}
@@ -220,7 +355,8 @@ function renderOrder(gid) {
         <p id="msg" class="err" hidden></p>
         <button id="send" class="btn primary">送出 · <span id="price">0</span> 元</button>
       </div>` : '<p class="notice">已經截止了，不能再點。</p>'}
-      <h2>大家點了</h2><div id="orders"></div>`;
+      <h2>大家點了</h2><div id="orders"></div>
+      ${open && mem.get('me') !== g.leader ? `<a class="btn soft sumbtn" href="#/g/${gid}/sum">看彙整、對帳（團主）</a>` : ''}`;
     built = true;
 
     const refresh = () => {
@@ -291,15 +427,22 @@ function renderOrder(gid) {
   const renderDone = () => {
     const box = document.getElementById('done'); if (!box) return;
     if (!done) { box.innerHTML = ''; document.getElementById('form')?.removeAttribute('hidden'); return; }
-    const mine = orders.filter((o) => o.name === done.name);
+    const mine = orders.filter((o) => o.name === done.name && !o.paid && (o.pay || '轉帳') === done.pay);
     const total = mine.reduce((s, o) => s + o.price, 0) || done.price;
+    const cash = done.pay === '現金';
+    const told = mine.length && mine.every((o) => o.told);
     box.innerHTML = `<div class="paybox">
-      <div>點好了！${esc(done.name)}一共要付</div>
+      <div>點好了！${esc(done.name)}${cash ? '用現金' : ''}一共要付</div>
       <div class="big">${total} 元</div>
-      <div>給 ${esc(g.leader)}${done.pay === '現金' ? '（現金）' : ''}</div>
-      ${done.pay === '轉帳' ? `<div class="acct">郵局 <b>${esc(g.account)}</b></div>
-        <button id="copyAcc" class="btn">複製帳號</button>` : ''}
+      <div>給 ${esc(g.leader)}${cash ? '（現金）' : ''}</div>
+      ${cash ? '' : `<div class="acct">郵局 <b>${esc(g.account)}</b></div>
+        <div class="note">${PAY_NOTE}</div>
+        <button id="copyAcc" class="btn">複製帳號</button>`}
+      ${told ? `<div class="acct">已告訴團主${cash ? '給現金了' : '匯好了'}</div>`
+        : `<button id="tellNow" class="btn">${cash ? '我給現金了' : '我匯好了'}</button>
+        <div class="small">晚點再付也可以，到首頁「我要付錢」找得到。</div>`}
       <button id="more" class="btn">再點一杯</button></div>`;
+    document.getElementById('tellNow')?.addEventListener('click', (e) => { e.target.disabled = true; tell(gid, mine.map((o) => o.id), cash ? '現金' : '匯款'); });
     document.getElementById('form')?.setAttribute('hidden', '');
     document.getElementById('copyAcc')?.addEventListener('click', (e) => copy(g.account.replace(/\D/g, ''), e.target));
     document.getElementById('more').addEventListener('click', () => { done = null; build(); });
@@ -351,17 +494,12 @@ function renderSummary(gid, isNew) {
     orders.forEach((o) => { const k = desc(o); merged[k] = (merged[k] || 0) + 1; });
     const shopText = Object.entries(merged).map(([k, n]) => `${k} ×${n}`).join('\n');
 
-    const people = {};
-    orders.forEach((o) => {
-      const p = people[o.name] || (people[o.name] = { name: o.name, total: 0, pay: new Set(), ids: [], paid: true });
-      p.total += o.price; p.pay.add(o.pay); p.ids.push(o.id); if (!o.paid) p.paid = false;
-    });
-    const plist = Object.values(people);
+    const plist = people(orders);
     const total = orders.reduce((s, o) => s + o.price, 0);
     const got = plist.filter((p) => p.paid).reduce((s, p) => s + p.total, 0);
 
     $app.innerHTML = `
-      <a class="back" href="#/g/${gid}">‹ 回點飲料</a>
+      <a class="back" href="#/mine">‹ 回我開的團</a>
       <div class="store-head store-${store(g.storeId)?.color || 'amber'}"><span class="cup">${CUP}</span><span><h1>${esc(g.storeName)} 彙整</h1>
       <span class="muted">${esc(g.leader)}開團${dl ? ' · ' + whenText(dl) + ' 截止' : ''} · ${isOpen(g) ? '點單中' : '已截止'}</span></span></div>
       <p id="err" class="err" hidden></p>
@@ -371,10 +509,10 @@ function renderSummary(gid, isNew) {
       ${orders.length ? `<div class="box">${Object.entries(merged).map(([k, n]) => `<div class="row"><span>${esc(k)}</span><b>×${n}</b></div>`).join('')}
         <button id="copyShop" class="btn soft">複製清單</button></div>` : '<p class="muted">還沒有人點。</p>'}
       <h2>誰要付多少（已收 ${got} / ${total} 元）</h2>
-      <p class="muted small">收到錢就打勾。</p>
-      <div class="box">${plist.map((p) => `<label class="row check">
+      <p class="muted small">對過郵局帳戶（匯款會備註名字）或拿到現金，就打勾。</p>
+      <div class="box">${plist.map((p) => { const st = payState(p); return `<label class="row check">
         <span><input type="checkbox" data-ids="${p.ids.join(',')}" ${p.paid ? 'checked' : ''}> ${esc(p.name)}</span>
-        <span>${p.total} 元 · ${[...p.pay].join('/')}</span></label>`).join('') || '<p class="muted">還沒有人點。</p>'}</div>
+        <span>${p.total} 元 · ${[...p.pay].join('/')} <span class="st ${st.cls}">${st.text}</span></span></label>`; }).join('') || '<p class="muted">還沒有人點。</p>'}</div>
       <button id="toggle" class="btn">${g.closed ? '重新開放點單' : '結束點單'}</button>`;
 
     document.getElementById('copyLine').addEventListener('click', (e) => copy(lineText, e.target));
@@ -406,6 +544,8 @@ function route() {
   const [path, qs] = h.split('?');
   const m = path.match(/^\/g\/([^/]+)(\/sum)?$/);
   if (path === '/new') renderNew();
+  else if (path === '/pay') renderPay();
+  else if (path === '/mine') renderMine();
   else if (m && m[2]) renderSummary(m[1], /new=1/.test(qs || ''));
   else if (m) renderOrder(m[1]);
   else renderHome();

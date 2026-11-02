@@ -38,8 +38,10 @@ service cloud.firestore {
           && request.resource.data.paid == false
           && request.resource.data.createdAt == request.time
           && get(/databases/$(database)/documents/groups/$(gid)).data.closed == false;
-        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid'])
-          && request.resource.data.paid is bool;
+        // paid：團主打勾收到；told：付錢的人說「我匯好了」（匯款）／「我給現金了」（現金），空字串＝按錯了收回
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paid', 'told'])
+          && request.resource.data.paid is bool
+          && (!('told' in request.resource.data) || request.resource.data.told in ['', '匯款', '現金']);
         allow delete: if true;
       }
     }

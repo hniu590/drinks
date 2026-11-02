@@ -212,7 +212,7 @@ function people(orders) {
   orders.forEach((o) => {
     const p = ps[o.name] || (ps[o.name] = { name: o.name, total: 0, pay: new Set(), ids: [], paid: true, toldAll: true, kinds: new Set() });
     p.total += o.price; p.pay.add(o.pay); p.ids.push(o.id);
-    if (!o.paid) { p.paid = false; if (o.told) p.kinds.add(o.told); else p.toldAll = false; }
+    if (!o.paid) { p.paid = false; p.due = (p.due || 0) + o.price; if (o.told) p.kinds.add(o.told); else p.toldAll = false; }
   });
   // told：全部沒打勾的杯子都說付了才算；兩種都有就是「匯款＋現金」
   return Object.values(ps).map((p) => ({ ...p, told: !p.paid && p.toldAll ? (p.kinds.size > 1 ? '都有' : [...p.kinds][0]) : '' }));
@@ -236,7 +236,7 @@ function renderMine() {
       const os = orders[g.id] || [];
       const ps = people(os);
       const total = os.reduce((s, o) => s + o.price, 0);
-      const got = ps.filter((p) => p.paid).reduce((s, p) => s + p.total, 0);
+      const got = os.filter((o) => o.paid).reduce((s, o) => s + o.price, 0);
       const told = ps.filter((p) => p.told).length;
       const dl = toDate(g.deadline);
       return `<div class="bill store-${store(g.storeId)?.color || 'amber'}">
@@ -496,7 +496,7 @@ function renderSummary(gid, isNew) {
 
     const plist = people(orders);
     const total = orders.reduce((s, o) => s + o.price, 0);
-    const got = plist.filter((p) => p.paid).reduce((s, p) => s + p.total, 0);
+    const got = orders.filter((o) => o.paid).reduce((s, o) => s + o.price, 0);
 
     $app.innerHTML = `
       <a class="back" href="#/mine">‹ 回我開的團</a>
@@ -512,7 +512,7 @@ function renderSummary(gid, isNew) {
       <p class="muted small">對過郵局帳戶（匯款會備註名字）或拿到現金，就打勾。</p>
       <div class="box">${plist.map((p) => { const st = payState(p); return `<label class="row check">
         <span><input type="checkbox" data-ids="${p.ids.join(',')}" ${p.paid ? 'checked' : ''}> ${esc(p.name)}</span>
-        <span>${p.total} 元 · ${[...p.pay].join('/')} <span class="st ${st.cls}">${st.text}</span></span></label>`; }).join('') || '<p class="muted">還沒有人點。</p>'}</div>
+        <span>${p.total} 元${!p.paid && p.due < p.total ? `（還差 ${p.due}）` : ''} · ${[...p.pay].join('/')} <span class="st ${st.cls}">${st.text}</span></span></label>`; }).join('') || '<p class="muted">還沒有人點。</p>'}</div>
       <button id="toggle" class="btn">${g.closed ? '重新開放點單' : '結束點單'}</button>`;
 
     document.getElementById('copyLine').addEventListener('click', (e) => copy(lineText, e.target));

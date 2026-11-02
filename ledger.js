@@ -5,7 +5,8 @@
 /** 大小怎麼寫：「瓶」寫成「瓶裝」，其他加「杯」。 */
 export const sizeName = (z) => (z === '瓶' ? '瓶裝' : z + '杯');
 const payOf = (o) => o.pay || '轉帳';
-const when = (o) => (o.createdAt && o.createdAt.toMillis ? o.createdAt.toMillis() : Infinity); // 剛送出還沒有時間的排最後
+// 點的時間：資料存取給毫秒數；剛送出還沒有時間的排最後
+const when = (o) => (typeof o.createdAt === 'number' ? o.createdAt : o.createdAt && o.createdAt.toMillis ? o.createdAt.toMillis() : Infinity);
 const byTime = (orders) => [...orders].sort((a, b) => when(a) - when(b));
 const sum = (os) => os.reduce((s, o) => s + o.price, 0);
 

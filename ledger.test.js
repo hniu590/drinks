@@ -112,3 +112,8 @@ test('舊點單沒有 pay 欄位：當作轉帳', () => {
 test('沒點的人：沒有帳單', () => {
   assert.deepEqual(billsFor([cup('乙', '紅茶', 40)], '甲'), []);
 });
+
+test('點的時間是毫秒數（資料存取給的）也照先後排', () => {
+  const x = { ...cup('甲', '紅茶', 40), createdAt: 200 }; const y = { ...cup('乙', '綠茶', 35), createdAt: 100 };
+  assert.deepEqual(groupLedger([x, y]).people.map((p) => p.name), ['乙', '甲']);
+});

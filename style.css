@@ -127,3 +127,14 @@ span.st-told:not(.st) { background: none; font-weight: 700; }
 .sumbtn { margin-top: 8px; font-weight: 700; }
 .check > span:first-child { white-space: nowrap; flex: none; }
 .check > span:last-child { text-align: right; }
+
+/* 帳本（11/2）：每人點了什麼、網址換行 */
+.box pre { overflow-wrap: anywhere; }
+.person { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.person:last-of-type { border-bottom: none; }
+.person .row { border-bottom: none; padding-bottom: 2px; }
+.cups { list-style: none; margin: 0; padding: 0 0 0 30px; font-size: 14px; color: var(--muted); }
+.cups li { display: flex; justify-content: space-between; gap: 12px; }
+.cups li > span:first-child { min-width: 0; }
+.cups li.done { text-decoration: line-through; }
+.bill .cups { padding-left: 0; margin-top: 8px; }

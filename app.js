@@ -42,6 +42,9 @@ async function copy(text, btn) {
   }
 }
 
+// 店家的選項＋各杯另外寫的選項（例：甜度固定）
+const allOf = (st, k) => [...new Set([...st[k], ...st.items.flatMap((i) => i[k] || [])])];
+
 function chips(name, options, selected, multi = false) {
   return `<div class="chips" data-group="${name}">${options.map((o) => {
     const label = typeof o === 'string' ? o : o.label;
@@ -292,8 +295,8 @@ function renderOrder(gid) {
         <div class="tabs">${cats.map((c) => `<button type="button" class="tab${c === f.cat ? ' on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
         <div id="menu"></div>
         <h2>大小</h2>${chips('size', st.sizes.map((z) => ({ label: sizeName(z), value: z })), f.size)}
-        <h2>甜度</h2>${chips('sugar', st.sugar, f.sugar)}
-        <h2>冰塊</h2>${chips('ice', st.ice, f.ice)}
+        <h2>甜度</h2>${chips('sugar', allOf(st, 'sugar'), f.sugar)}
+        <h2>冰塊</h2>${chips('ice', allOf(st, 'ice'), f.ice)}
         ${st.toppings.length ? `<h2>加料（可以不選）</h2>${chips('toppings', st.toppings.map((x) => ({ label: `+${x.n} ${x.p}`, value: x.n })), f.toppings, true)}` : ''}
         <h2>備註（可以不填）</h2><input id="note" maxlength="60" placeholder="例：分兩杯裝">
         <h2>怎麼付錢</h2><p class="hint">${PAY_HINT}</p>${chips('pay', ['轉帳', '現金'], f.pay)}
@@ -322,12 +325,14 @@ function renderOrder(gid) {
         const z = c.dataset.value; const has = !it || it.p[z] != null;
         c.hidden = !has; c.textContent = it && has ? `${sizeName(z)} ${it.p[z]}` : sizeName(z);
       });
-      // 冰塊：有的飲料不能做熱的（11/3），只顯示那杯可以選的；只有一種就自動選好
-      const iceOk = (it && it.ice) || st.ice;
-      if (f.ice && !iceOk.includes(f.ice)) f.ice = '';
-      if (it && iceOk.length === 1) f.ice = iceOk[0];
-      $app.querySelectorAll('.chips[data-group=ice] .chip').forEach((c) => {
-        c.hidden = !iceOk.includes(c.dataset.value); c.classList.toggle('on', f.ice === c.dataset.value);
+      // 甜度、冰塊：有的飲料只能冷飲、只能熱飲或甜度固定（11/3），只顯示那杯可以選的；只有一種就自動選好
+      ['sugar', 'ice'].forEach((k) => {
+        const okList = (it && it[k]) || st[k];
+        if (f[k] && !okList.includes(f[k])) f[k] = '';
+        if (it && okList.length === 1) f[k] = okList[0];
+        $app.querySelectorAll(`.chips[data-group=${k}] .chip`).forEach((c) => {
+          c.hidden = !okList.includes(c.dataset.value); c.classList.toggle('on', f[k] === c.dataset.value);
+        });
       });
       const p = document.getElementById('price'); if (p) p.textContent = price(st);
       const note = document.getElementById('note'); if (note && note.value !== f.note) note.value = f.note;

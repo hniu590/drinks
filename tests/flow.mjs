@@ -178,6 +178,24 @@ await page.click('.chips[data-group=sugar] >> text=半糖'); await page.click('.
 await page.click('.chips[data-group=toppings] >> text=/黃金珍珠/'); await page.click('#send'); await page.waitForTimeout(150);
 ok('得正 烘吉奶茶熱的＋黃金珍珠 60 元送出', (await T()).includes('60 元'));
 
+// ===== 甜度固定、只有熱飲（11/3：COMEBUY）=====
+await page.evaluate(() => {
+  window.__drinksTesting.putGroup({ id: 'cb', storeId: 'comebuy', storeName: 'COMEBUY 八德福國店', leader: '葉澄銘', account: '1', deadline: Date.now() + 3600e3 });
+});
+await go('#/g/cb');
+const sugars = async () => page.$$eval('.chips[data-group=sugar] .chip', (cs) => cs.filter((c) => !c.hidden).map((c) => c.dataset.value).join(','));
+await page.click('.item >> text="四季春"');
+ok('COMEBUY 甜度照菜單寫法、沒有「甜度固定」', (await sugars()) === '標準糖,少糖,半糖,微糖,無糖');
+await page.click('.chips[data-group=sugar] >> text=無糖');
+await page.click('.tab >> text=/冬季限定/'); await page.click('.item >> text="桂圓紅棗"');
+ok('桂圓紅棗：甜度固定、熱飲都自動選好', (await sugars()) === '甜度固定' && (await ices()) === '熱飲'
+  && (await page.locator('.chips[data-group=sugar] .chip.on').innerText()) === '甜度固定' && (await page.locator('.chips[data-group=ice] .chip.on').innerText()) === '熱飲');
+await page.click('.tab >> text=鮮調果茶'); await page.click('.item >> text="芭樂檸檬綠"');
+ok('芭樂檸檬綠：沒有無糖、沒有熱飲', !(await sugars()).includes('無糖') && !(await ices()).includes('熱飲'));
+await page.click('.chips[data-group=sugar] >> text=半糖'); await page.click('.chips[data-group=ice] >> text=少冰');
+await page.click('#send'); await page.waitForTimeout(150);
+ok('COMEBUY 芭樂檸檬綠 65 元送出', (await T()).includes('65 元'));
+
 console.log(`\n通過 ${pass}，失敗 ${fail}`);
 if (errs.length) console.log('畫面錯誤：', errs);
 await browser.close();

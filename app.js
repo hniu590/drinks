@@ -322,6 +322,13 @@ function renderOrder(gid) {
         const z = c.dataset.value; const has = !it || it.p[z] != null;
         c.hidden = !has; c.textContent = it && has ? `${sizeName(z)} ${it.p[z]}` : sizeName(z);
       });
+      // 冰塊：有的飲料不能做熱的（11/3），只顯示那杯可以選的；只有一種就自動選好
+      const iceOk = (it && it.ice) || st.ice;
+      if (f.ice && !iceOk.includes(f.ice)) f.ice = '';
+      if (it && iceOk.length === 1) f.ice = iceOk[0];
+      $app.querySelectorAll('.chips[data-group=ice] .chip').forEach((c) => {
+        c.hidden = !iceOk.includes(c.dataset.value); c.classList.toggle('on', f.ice === c.dataset.value);
+      });
       const p = document.getElementById('price'); if (p) p.textContent = price(st);
       const note = document.getElementById('note'); if (note && note.value !== f.note) note.value = f.note;
     };

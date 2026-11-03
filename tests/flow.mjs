@@ -158,6 +158,26 @@ ok('首頁只留 12 小時內截止的', (await seen('#/')) === '留A');
 ok('我開的團留 3 天（最近截止的在前）', (await seen('#/mine')) === '留A留B');
 ok('我要付錢留 7 天', (await seen('#/pay')) === '留A留B留C');
 
+// ===== 只能冷飲的飲料（11/3：得正、迷客夏）=====
+await page.evaluate(() => {
+  const T = window.__drinksTesting;
+  T.putGroup({ id: 'hotcold', storeId: 'dezheng', storeName: '得正 八德廣福計劃', leader: '葉澄銘', account: '1', deadline: Date.now() + 3600e3 });
+});
+await as('葉澄銘'); await go('#/g/hotcold');
+const ices = async () => page.$$eval('.chips[data-group=ice] .chip', (cs) => cs.filter((c) => !c.hidden).map((c) => c.dataset.value).join(','));
+ok('得正有 5 個分頁', await page.locator('.tab').count() === 5);
+await page.click('.item >> text="紅茶"'); ok('原茶可以選溫、熱', (await ices()).includes('熱'));
+await page.click('.chips[data-group=ice] >> text=熱');
+await page.click('.tab >> text=雙倍水果'); await page.click('.item >> text="檸檬春烏龍"');
+ok('水果茶不能選溫、熱，選過的熱被清掉', !(await ices()).includes('熱') && await page.locator('.chips[data-group=ice] .chip.on').count() === 0);
+await page.click('.tab >> text=芝士奶蓋'); await page.click('.item >> text="芝士奶蓋春烏龍"');
+ok('芝士奶蓋只能少冰、自動選好', (await ices()) === '少冰' && (await page.locator('.chips[data-group=ice] .chip.on').innerText()) === '少冰');
+await page.click('.tab >> text=經典奶茶'); await page.click('.item >> text="烘吉奶茶"');
+ok('烘吉奶茶只有大杯、自動選好', (await page.locator('.chips[data-group=size] .chip.on').innerText()).includes('大'));
+await page.click('.chips[data-group=sugar] >> text=半糖'); await page.click('.chips[data-group=ice] >> text=熱');
+await page.click('.chips[data-group=toppings] >> text=/黃金珍珠/'); await page.click('#send'); await page.waitForTimeout(150);
+ok('得正 烘吉奶茶熱的＋黃金珍珠 60 元送出', (await T()).includes('60 元'));
+
 console.log(`\n通過 ${pass}，失敗 ${fail}`);
 if (errs.length) console.log('畫面錯誤：', errs);
 await browser.close();

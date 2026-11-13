@@ -297,7 +297,7 @@ function renderOrder(gid) {
         <h2>大小</h2>${chips('size', st.sizes.map((z) => ({ label: sizeName(z), value: z })), f.size)}
         <h2>甜度</h2>${chips('sugar', allOf(st, 'sugar'), f.sugar)}
         <h2>冰塊</h2>${chips('ice', allOf(st, 'ice'), f.ice)}
-        ${st.toppings.length ? `<h2>加料（可以不選）</h2>${chips('toppings', st.toppings.map((x) => ({ label: `+${x.n} ${x.p}`, value: x.n })), f.toppings, true)}` : ''}
+        ${st.toppings.length ? `<div id="tops"><h2>加料（可以不選）</h2>${chips('toppings', st.toppings.map((x) => ({ label: `+${x.n} ${x.p}`, value: x.n })), f.toppings, true)}</div>` : ''}
         <h2>備註（可以不填）</h2><input id="note" maxlength="60" placeholder="例：分兩杯裝">
         <h2>怎麼付錢</h2><p class="hint">${PAY_HINT}</p>${chips('pay', ['轉帳', '現金'], f.pay)}
         <p id="msg" class="err" hidden></p>
@@ -334,6 +334,9 @@ function renderOrder(gid) {
           c.hidden = !okList.includes(c.dataset.value); c.classList.toggle('on', f[k] === c.dataset.value);
         });
       });
+      // 不能加料的飲料（11/13 林三冷泡茶）：寫 noTop: true，加料區藏起來、已選的清掉
+      const tops = document.getElementById('tops');
+      if (tops) { tops.hidden = !!(it && it.noTop); if (tops.hidden) f.toppings = []; }
       const p = document.getElementById('price'); if (p) p.textContent = price(st);
       const note = document.getElementById('note'); if (note && note.value !== f.note) note.value = f.note;
     };
@@ -363,7 +366,7 @@ function renderOrder(gid) {
     }
     if (names$) bindNames();
 
-    $app.querySelectorAll('#form > .chips').forEach((box) => box.addEventListener('click', (ev) => {
+    $app.querySelectorAll('#form > .chips, #tops > .chips').forEach((box) => box.addEventListener('click', (ev) => {
       const b = ev.target.closest('.chip'); if (!b) return;
       const k = box.dataset.group; const v = b.dataset.value;
       const msg = document.getElementById('msg'); if (msg) msg.hidden = true;

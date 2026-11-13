@@ -196,6 +196,30 @@ await page.click('.chips[data-group=sugar] >> text=半糖'); await page.click('.
 await page.click('#send'); await page.waitForTimeout(150);
 ok('COMEBUY 芭樂檸檬綠 65 元送出', (await T()).includes('65 元'));
 
+// ===== 不能加料、拿鐵無常溫（11/13：林三茶研所）=====
+await page.evaluate(() => {
+  window.__drinksTesting.putGroup({ id: 'ls', storeId: 'linson', storeName: '林三茶研所', leader: '葉澄銘', account: '1', deadline: Date.now() + 3600e3 });
+});
+await go('#/g/ls');
+const topsShown = async () => page.$eval('#tops', (x) => !x.hidden);
+ok('林三有 6 個分頁', await page.locator('.tab').count() === 6);
+await page.click('.item >> text="四季青茶"'); await page.click('.chips[data-group=toppings] >> text=/小紫蘇/');
+ok('四季青茶可以加料、選溫熱', await topsShown() && (await ices()).includes('熱'));
+await page.click('.item >> text=/坪林文山包種/');
+ok('冷泡茶：無糖自動選好、沒有加料、沒有溫熱、價錢 49', (await sugars()) === '無糖' && !(await topsShown())
+  && !(await ices()).includes('熱') && (await page.locator('#price').innerText()) === '49');
+await page.click('.tab >> text=達人の拿鐵'); await page.click('.item >> text="珍珠紅茶拿鐵"');
+ok('拿鐵沒有常溫、有熱、加料又出現', !(await ices()).includes('常溫') && (await ices()).includes('熱') && await topsShown());
+await page.click('.item >> text="烏龍茶凍拿鐵"');
+ok('烏龍茶凍拿鐵沒有常溫也沒有溫熱', (await ices()) === '正常冰,少冰,微冰,去冰,完全去冰');
+await page.click('.tab >> text=招牌の奶茶'); await page.click('.item >> text="原汁原味泰奶"');
+ok('泰奶糖度固定自動選好', (await page.locator('.chips[data-group=sugar] .chip.on').innerText()) === '糖度固定');
+await page.click('.item >> text="琥珀珍珠奶茶"'); await page.click('.chips[data-group=size] >> text=/中/');
+await page.click('.chips[data-group=sugar] >> text=5分糖'); await page.click('.chips[data-group=ice] >> text=完全去冰');
+await page.click('.chips[data-group=toppings] >> text=/仙草凍/');
+await page.click('#send'); await page.waitForTimeout(150);
+ok('林三 琥珀珍珠奶茶中杯＋仙草凍 65 元送出', (await T()).includes('65 元'));
+
 console.log(`\n通過 ${pass}，失敗 ${fail}`);
 if (errs.length) console.log('畫面錯誤：', errs);
 await browser.close();

@@ -1,5 +1,5 @@
 // 老師名單和店家菜單（都是真的）。
-// 每家店：color 是店家顏色（pink / blue / teal / amber / purple / green / navy / forest），phone 是店家電話（有寫才出現在團主的彙整頁）
+// 每家店：color 是店家顏色（pink / blue / teal / amber / purple / green / navy / forest），phone 是店家電話（有寫才出現在團主的彙整頁），orderUrl 是線上訂購網址、note 是給團主的提醒（都寫在電話下面）
 // 每杯飲料的 c 是分類（點飲料頁上面的分頁），照菜單上的分法寫。
 // 每杯飲料可以另外寫 ice、sugar（這杯能選的冰塊、甜度），沒寫就照店家的；noTop: true＝這杯不能加料。
 
@@ -29,6 +29,7 @@ const MS_COLD = ['正常冰', '少冰', '微冰', '去冰', '常溫'];
 export const STORES = [
   {
     id: '50lan',
+    phone: '03-365-1650',
     name: '50嵐',
     color: 'blue',
     sizes: ['大', '中'],
@@ -97,6 +98,7 @@ export const STORES = [
     // TEA'S原味：老師 10/26 傳的北區菜單（2022/11 版）。只有大杯（L），部分有瓶裝。
     // 菜單上的「海尼根綠茶」「長島冰茶」有酒精警語，學校用不放。
     id: 'teas',
+    phone: '03-373-2868',
     name: "TEA'S原味",
     color: 'green',
     sizes: ['大', '瓶'],
@@ -209,6 +211,7 @@ export const STORES = [
   {
     // 茶聚：老師 10/26 放在 pCloud 的「茶聚飲料.pdf」（店章電話 03-367-977…）。用一般價，不用會員價。
     id: 'chage',
+    phone: '03-367-9777',
     name: '茶聚',
     color: 'amber',
     sizes: ['大', '中'],
@@ -265,6 +268,7 @@ export const STORES = [
     // 得正 八德廣福計劃：老師 11/3 傳的菜單（ver.25.12，M＝中杯、L＝大杯）。
     // 只有原茶、經典奶茶、鮮奶可以做熱的；芝士奶蓋固定少冰。菜單沒寫甜度，用一般的五種。
     id: 'dezheng',
+    phone: '03-368-5566',
     name: '得正 八德廣福計劃',
     color: 'purple',
     sizes: ['大', '中'],
@@ -302,6 +306,9 @@ export const STORES = [
     // 迷客夏 桃園八德興豐店：老師 11/3 傳的菜單（2026-4-10 版）。
     // 菜單上藍點＝冷飲限定（季節限定整區、部分果茶）。「綠光純鮮奶家庭號」是整瓶，不放。
     id: 'milksha',
+    phone: '03-373-2484',
+    orderUrl: 'https://order.nidin.shop/menu/18978',
+    note: '滿 200 元可以外送',
     name: '迷客夏 八德興豐店',
     color: 'teal',
     sizes: ['大', '中'],
@@ -367,6 +374,7 @@ export const STORES = [
     // 菜單藍點＝只有冰飲、紅點＝只有熱飲；「僅提供微蜜／微糖以上」「甜度固定」「僅提供少冰以上」照菜單。
     // 「加價換鮮奶（茶）」不做按鈕，要換寫備註。
     id: 'comebuy',
+    phone: '03-363-0701',
     name: 'COMEBUY 八德福國店',
     color: 'pink',
     sizes: ['大', '中'],
@@ -461,6 +469,7 @@ export const STORES = [
     // ✻＝無熱飲；粉角、烏龍茶凍不能做溫熱；拿鐵系列無常溫；冷泡茶不能加糖加料；泰奶糖度固定。
     // 右上新品「粉條四季青茶」沒寫價錢，老師說先不放。
     id: 'linson',
+    phone: '03-368-2664',
     name: '林三茶研所',
     color: 'navy',
     sizes: ['大', '中'],

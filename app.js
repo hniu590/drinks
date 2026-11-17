@@ -459,6 +459,13 @@ function renderOrder(gid) {
 }
 
 // ---------- 彙整（團主） ----------
+// 店家電話、線上訂購、提醒（11/17）：寫在 data.js，有寫才出現
+function shopInfo(st) {
+  if (!st) return '';
+  return (st.phone ? `<a id="call" class="btn soft call" href="tel:${st.phone.replace(/-/g, '')}">📞 打給店家 ${esc(st.phone)}</a>` : '')
+    + (st.orderUrl ? `<a id="orderUrl" class="btn soft call" href="${esc(st.orderUrl)}" target="_blank" rel="noopener">🛒 線上訂購</a>` : '')
+    + (st.note ? `<p id="shopNote" class="notice">${esc(st.note)}</p>` : '');
+}
 function renderSummary(gid, isNew) {
   $app.innerHTML = '<p class="muted">載入中…</p>';
   let g = null; let orders = [];
@@ -480,7 +487,7 @@ function renderSummary(gid, isNew) {
       ${isNew ? '<p class="notice">開團成功！先把下面這段話貼到 LINE 群。</p>' : ''}
       <div class="box"><pre>${esc(lineText)}</pre><button id="copyLine" class="btn soft">複製這段話貼到 LINE</button></div>
       <h2>跟店家這樣說（共 ${L.cups} 杯，${L.total} 元）</h2>
-      ${shop(g.storeId)?.phone ? `<a id="call" class="btn soft call" href="tel:${shop(g.storeId).phone.replace(/-/g, '')}">📞 打給店家 ${esc(shop(g.storeId).phone)}</a>` : ''}
+      ${shopInfo(shop(g.storeId))}
       ${L.cups ? `<div class="box">${L.shop.map((x) => `<div class="row"><span>${esc(x.text)}</span><b>×${x.n}</b></div>`).join('')}
         <button id="copyShop" class="btn soft">複製清單</button></div>` : '<p class="muted">還沒有人點。</p>'}
       <h2>誰要付多少（已收 ${L.got} / ${L.total} 元）</h2>

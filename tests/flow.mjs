@@ -241,8 +241,15 @@ await page.click('#send'); await page.waitForTimeout(150);
 ok('滿上 泰沖凍罐裝＋小紫蘇 100 元送出', (await T()).includes('100 元'));
 await go('#/g/ms/sum');
 ok('團主彙整頁有打給店家的電話', (await page.getAttribute('#call', 'href')) === 'tel:033687516');
-await go('#/g/ls/sum');
-ok('沒寫電話的店不出現電話', (await page.locator('#call').count()) === 0);
+await page.evaluate(() => {
+  window.__drinksTesting.putGroup({ id: 'mk', storeId: 'milksha', storeName: '迷客夏 八德興豐店', leader: '葉澄銘', account: '1', deadline: Date.now() + 3600e3 });
+});
+await go('#/g/mk/sum');
+ok('迷客夏彙整頁有電話、線上訂購、外送提醒', (await page.getAttribute('#call', 'href')) === 'tel:033732484'
+  && (await page.getAttribute('#orderUrl', 'href')) === 'https://order.nidin.shop/menu/18978'
+  && (await page.locator('#shopNote').innerText()).includes('200'));
+await go('#/g/ms/sum');
+ok('滿上沒有線上訂購和提醒', (await page.locator('#orderUrl').count()) === 0 && (await page.locator('#shopNote').count()) === 0);
 
 console.log(`\n通過 ${pass}，失敗 ${fail}`);
 if (errs.length) console.log('畫面錯誤：', errs);

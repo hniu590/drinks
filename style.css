@@ -4,7 +4,7 @@
   --ok-bg: #eaf3de; --ok-text: #27500a; --err: #a32d2d;
   --pink: #993556; --pink-bg: #fbeaf0; --blue: #185fa5; --blue-bg: #e6f1fb; --teal: #0f6e56; --teal-bg: #e1f5ee;
   --amber: #854f0b; --amber-bg: #faeeda; --purple: #534ab7; --purple-bg: #eeedfe; --green: #3b6d11; --green-bg: #eaf3de;
-  --navy: #1f3a68; --navy-bg: #e3e9f4;
+  --navy: #1f3a68; --navy-bg: #e3e9f4; --forest: #24503c; --forest-bg: #e0eee6;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -13,7 +13,7 @@
     --ok-bg: #233a14; --ok-text: #c0dd97; --err: #f09595;
     --pink: #f4c0d1; --pink-bg: #4b1528; --blue: #b5d4f4; --blue-bg: #042c53; --teal: #9fe1cb; --teal-bg: #04342c;
     --amber: #fac775; --amber-bg: #412402; --purple: #cecbf6; --purple-bg: #26215c; --green: #c0dd97; --green-bg: #173404;
-    --navy: #b9c9e6; --navy-bg: #14223d;
+    --navy: #b9c9e6; --navy-bg: #14223d; --forest: #a9d6bf; --forest-bg: #10291d;
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -41,6 +41,7 @@ a { color: var(--accent); }
 .store-purple { --c: var(--purple); --cbg: var(--purple-bg); }
 .store-green { --c: var(--green); --cbg: var(--green-bg); }
 .store-navy { --c: var(--navy); --cbg: var(--navy-bg); }
+.store-forest { --c: var(--forest); --cbg: var(--forest-bg); }
 .cup { width: 44px; height: 44px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center;
   background: var(--cbg); color: var(--c); flex: none; }
 
@@ -169,3 +170,6 @@ span.st-told:not(.st) { background: none; font-weight: 700; }
 .flow.member .n { background: var(--purple-bg); color: var(--purple); }
 .flow b { font-weight: 600; }
 .flow small { display: block; color: var(--muted); font-size: 13px; }
+
+/* 團主彙整頁：店家電話，手機點了直接撥（11/17） */
+.call { margin: 0 0 8px; }

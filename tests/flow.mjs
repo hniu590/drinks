@@ -220,6 +220,30 @@ await page.click('.chips[data-group=toppings] >> text=/仙草凍/');
 await page.click('#send'); await page.waitForTimeout(150);
 ok('林三 琥珀珍珠奶茶中杯＋仙草凍 65 元送出', (await T()).includes('65 元'));
 
+// ===== 滿上（11/17）：罐裝、葉子記號才有溫熱、團主頁有店家電話 =====
+await page.evaluate(() => {
+  window.__drinksTesting.putGroup({ id: 'ms', storeId: 'manshang', storeName: '滿上', leader: '葉澄銘', account: '1', deadline: Date.now() + 3600e3 });
+});
+await go('#/g/ms');
+ok('滿上有 10 個分頁', await page.locator('.tab').count() === 10);
+await page.click('.item >> text="百年仙草干茶"');
+ok('百年仙草干茶（有葉子）可以選熱飲', (await ices()).includes('熱飲'));
+await page.click('.item >> text=/特濃仙草茶/');
+ok('特濃仙草茶：只有罐裝、無糖、不能加料、沒有熱飲', (await page.locator('.chips[data-group=size] .chip.on').innerText()).includes('罐裝')
+  && (await sugars()) === '無糖' && !(await topsShown()) && !(await ices()).includes('熱飲'));
+await page.click('.tab >> text=滿上特調'); await page.click('.item >> text="桑椹果茶"');
+ok('桑椹果茶（沒葉子）沒有溫熱、有常溫', !(await ices()).includes('熱飲') && !(await ices()).includes('溫飲') && (await ices()).includes('常溫'));
+await page.click('.tab >> text=泰奶系列'); await page.click('.item >> text=/泰沖凍/');
+await page.click('.chips[data-group=size] >> text=/罐裝/');
+await page.click('.chips[data-group=sugar] >> text=半糖'); await page.click('.chips[data-group=ice] >> text=少冰');
+await page.click('.chips[data-group=toppings] >> text=小紫蘇');
+await page.click('#send'); await page.waitForTimeout(150);
+ok('滿上 泰沖凍罐裝＋小紫蘇 100 元送出', (await T()).includes('100 元'));
+await go('#/g/ms/sum');
+ok('團主彙整頁有打給店家的電話', (await page.getAttribute('#call', 'href')) === 'tel:033687516');
+await go('#/g/ls/sum');
+ok('沒寫電話的店不出現電話', (await page.locator('#call').count()) === 0);
+
 console.log(`\n通過 ${pass}，失敗 ${fail}`);
 if (errs.length) console.log('畫面錯誤：', errs);
 await browser.close();
